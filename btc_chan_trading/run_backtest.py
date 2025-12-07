@@ -8,12 +8,32 @@ import os
 import sys
 import json
 import argparse
+import logging
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings('ignore')
+
+# 配置日志系统
+LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# 生成带时间戳的日志文件名
+LOG_FILE = os.path.join(LOG_DIR, f'backtest_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+logger = logging.getLogger('run_backtest')
 
 # 导入真实回测引擎
 from backtest_system import RealChanBacktestEngine as RealEngine
@@ -30,13 +50,13 @@ class ChanBacktestEngine:
         
     def run(self):
         """运行回测"""
-        print(f"\n🔍 运行回测: {self.config['symbol']} {self.config['timeframe']}")
-        print(f"   时间: {self.config['start_date']} 到 {self.config['end_date']}")
-        print(f"   资金: ${self.config['initial_capital']}")
+        logger.info(f"\n🔍 运行回测: {self.config['symbol']} {self.config['timeframe']}")
+        logger.info(f"   时间: {self.config['start_date']} 到 {self.config['end_date']}")
+        logger.info(f"   资金: ${self.config['initial_capital']}")
         
         # 使用真实回测引擎
         if self.config['verbose']:
-            print("   使用真实数据回测中...")
+            logger.info("   使用真实数据回测中...")
         
         # 转换配置到真实回测引擎的格式
         real_config = RealConfig()
@@ -63,7 +83,7 @@ class ChanBacktestEngine:
         real_results = real_engine.run_backtest()
         
         if real_results is None:
-            print("❌ 回测失败")
+            logger.error("❌ 回测失败")
             return None
         
         # 转换结果格式以兼容原有接口
@@ -92,15 +112,15 @@ class ChanBacktestEngine:
     
     def print_report(self, results):
         """打印报告"""
-        print("\n" + "="*60)
-        print("📊 回测结果报告")
-        print("="*60)
-        print(f"总收益率: {results['total_return']:.2f}%")
-        print(f"最大回撤: {results['max_drawdown']:.2f}%")
-        print(f"胜率: {results['win_rate']:.2f}%")
-        print(f"交易次数: {results['total_trades']}")
-        print(f"夏普比率: {results['sharpe_ratio']:.2f}")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("📊 回测结果报告")
+        logger.info("="*60)
+        logger.info(f"总收益率: {results['total_return']:.2f}%")
+        logger.info(f"最大回撤: {results['max_drawdown']:.2f}%")
+        logger.info(f"胜率: {results['win_rate']:.2f}%")
+        logger.info(f"交易次数: {results['total_trades']}")
+        logger.info(f"夏普比率: {results['sharpe_ratio']:.2f}")
+        logger.info("="*60)
     
     def save_report(self, results, output_dir):
         """保存报告"""
@@ -131,12 +151,12 @@ class ChanBacktestEngine:
             real_report_file = f"{outer_dir}/real_report_{timestamp}.json"
             with open(real_report_file, 'w') as f:
                 json.dump(self.real_results, f, indent=2, default=str)
-            print(f"💾 真实回测详细报告已保存: {real_report_file}")
+            logger.info(f"💾 真实回测详细报告已保存: {real_report_file}")
         
         with open(report_file, 'w') as f:
             json.dump(report_data, f, indent=2, default=str)
         
-        print(f"💾 报告已保存: {report_file}")
+        logger.info(f"💾 报告已保存: {report_file}")
         return report_file
 
 # ====================== 命令行参数解析 ======================
@@ -316,9 +336,9 @@ class ConfigManager:
             with open(config_file, 'r') as f:
                 file_config = json.load(f)
             base_config.update(file_config)
-            print(f"✅ 从文件加载配置: {config_file}")
+            logger.info(f"✅ 从文件加载配置: {config_file}")
         except Exception as e:
-            print(f"⚠️  配置文件加载失败: {e}")
+            logger.warning(f"⚠️  配置文件加载失败: {e}")
     
     @staticmethod
     def save_config_to_file(config, filename):
@@ -332,15 +352,15 @@ class ConfigManager:
         with open(filename, 'w') as f:
             json.dump(config, f, indent=2, default=str)
         
-        print(f"💾 配置已保存: {filename}")
+        logger.info(f"💾 配置已保存: {filename}")
         return filename
     
     @staticmethod
     def display_config(config):
         """显示配置信息"""
-        print("\n" + "="*60)
-        print("📋 当前配置")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("📋 当前配置")
+        logger.info("="*60)
         
         groups = {
             '回测参数': ['symbol', 'timeframe', 'start_date', 'end_date'],
@@ -351,21 +371,21 @@ class ConfigManager:
         }
         
         for group, keys in groups.items():
-            print(f"\n{group}:")
+            logger.info(f"\n{group}:")
             for key in keys:
                 if key in config:
                     value = config[key]
                     if isinstance(value, float):
                         if 'pct' in key or 'fee' in key:
-                            print(f"  {key}: {value:.2f}%")
+                            logger.info(f"  {key}: {value:.2f}%")
                         else:
-                            print(f"  {key}: {value}")
+                            logger.info(f"  {key}: {value}")
                     elif isinstance(value, bool):
-                        print(f"  {key}: {'是' if value else '否'}")
+                        logger.info(f"  {key}: {'是' if value else '否'}")
                     else:
-                        print(f"  {key}: {value}")
+                        logger.info(f"  {key}: {value}")
         
-        print("="*60)
+        logger.info("="*60)
 
 # ====================== 批量测试工具 ======================
 class BatchTester:
@@ -449,7 +469,7 @@ class BatchTester:
         results = []
         
         for i, params in enumerate(param_sets, 1):
-            print(f"\n🔧 测试组合 {i}/{len(param_sets)}:")
+            logger.info(f"\n🔧 测试组合 {i}/{len(param_sets)}:")
             
             # 合并配置
             test_config = base_config.copy()
@@ -457,7 +477,7 @@ class BatchTester:
             
             # 显示参数
             for key, value in params.items():
-                print(f"  {key}: {value}")
+                logger.info(f"  {key}: {value}")
             
             # 运行回测
             engine = ChanBacktestEngine(test_config)
@@ -477,21 +497,21 @@ class BatchTester:
         if not results:
             return None
         
-        print("\n" + "="*60)
-        print("📊 批量测试结果分析")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("📊 批量测试结果分析")
+        logger.info("="*60)
         
         # 找出最佳结果
         best_return = max(results, key=lambda x: x['result']['total_return'])
         best_sharpe = max(results, key=lambda x: x['result'].get('sharpe_ratio', 0))
         
-        print(f"\n🏆 最佳收益率:")
-        print(f"   收益率: {best_return['result']['total_return']:.2f}%")
-        print(f"   参数: {json.dumps(best_return['params'], indent=2)}")
+        logger.info(f"\n🏆 最佳收益率:")
+        logger.info(f"   收益率: {best_return['result']['total_return']:.2f}%")
+        logger.info(f"   参数: {json.dumps(best_return['params'], indent=2)}")
         
-        print(f"\n📈 最佳夏普比率:")
-        print(f"   夏普比率: {best_sharpe['result'].get('sharpe_ratio', 0):.2f}")
-        print(f"   参数: {json.dumps(best_sharpe['params'], indent=2)}")
+        logger.info(f"\n📈 最佳夏普比率:")
+        logger.info(f"   夏普比率: {best_sharpe['result'].get('sharpe_ratio', 0):.2f}")
+        logger.info(f"   参数: {json.dumps(best_sharpe['params'], indent=2)}")
         
         # 保存结果
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -503,7 +523,7 @@ class BatchTester:
         with open(results_file, 'w') as f:
             json.dump(results, f, indent=2, default=str)
         
-        print(f"💾 批量测试结果已保存: {results_file}")
+        logger.info(f"💾 批量测试结果已保存: {results_file}")
         
         return best_return, best_sharpe
 
@@ -531,13 +551,13 @@ def main():
     
     # 批量测试模式
     if args.batch:
-        print("\n📊 进入批量测试模式")
+        logger.info("\n📊 进入批量测试模式")
         
         # 解析参数网格
         param_grid = BatchTester.parse_param_grid(args.batch)
         param_sets = BatchTester.generate_param_sets(param_grid)
         
-        print(f"将测试 {len(param_sets)} 种参数组合")
+        logger.info(f"将测试 {len(param_sets)} 种参数组合")
         
         # 运行批量测试
         BatchTester.run_batch_tests(config, param_sets)
@@ -545,13 +565,13 @@ def main():
         return
     
     # 单次回测模式
-    print("\n🚀 开始单次回测")
+    logger.info("\n🚀 开始单次回测")
     
     # 确认开始
     if not args.quiet:
         confirm = input("\n确认开始回测? (y/n): ").lower()
         if confirm != 'y':
-            print("回测已取消")
+            logger.info("回测已取消")
             return
     
     # 创建回测引擎
@@ -568,7 +588,7 @@ def main():
         if config['save_results']:
             engine.save_report(results, config['output_dir'])
         
-        print("\n✅ 回测完成!")
+        logger.info("\n✅ 回测完成!")
 
 # ====================== 便捷运行脚本 ======================
 if __name__ == "__main__":
@@ -581,9 +601,9 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n👋 程序被用户中断")
+        logger.info("\n\n👋 程序被用户中断")
     except Exception as e:
-        print(f"\n❌ 程序运行出错: {e}")
+        logger.error(f"\n❌ 程序运行出错: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

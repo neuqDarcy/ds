@@ -29,6 +29,32 @@ load_dotenv()
 # 忽略警告
 warnings.filterwarnings('ignore')
 
+# 配置日志系统
+import logging
+import os
+from datetime import datetime
+
+# 创建logs目录
+logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(logs_dir, exist_ok=True)
+
+# 日志文件名包含日期和时间
+log_filename = f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_btc_trading.log"
+log_filepath = os.path.join(logs_dir, log_filename)
+
+# 配置日志格式
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_filepath, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+# 创建logger实例
+logger = logging.getLogger(__name__)
+
 # ====================== 配置类 ======================
 @dataclass
 class Config:
@@ -91,10 +117,10 @@ class ExchangeManager:
                 'enableRateLimit': True,
                 'timeout': 30000
             })
-            print("✅ 交易所连接初始化成功")
+            logger.info("✅ 交易所连接初始化成功")
             self.initialized = True
         except Exception as e:
-            print(f"❌ 交易所连接失败: {e}")
+            logger.error(f"❌ 交易所连接失败: {e}")
             self.initialized = False
     
     def get_ohlcv(self, timeframe: str, limit: int = 100) -> pd.DataFrame:
@@ -102,7 +128,7 @@ class ExchangeManager:
         try:
             return self._get_real_data(timeframe, limit)
         except Exception as e:
-            print(f"❌ 获取K线数据失败: {e}")
+            logger.error(f"❌ 获取K线数据失败: {e}")
             return pd.DataFrame()
     
     def _get_real_data(self, timeframe: str, limit: int) -> pd.DataFrame:
@@ -192,7 +218,7 @@ class ExchangeManager:
                 ticker = self.exchange.fetch_ticker(self.config.SYMBOL)
                 return float(ticker['last'])
         except Exception as e:
-            print(f"获取当前价格失败: {e}")
+            logger.error(f"获取当前价格失败: {e}")
             return 0.0
     
     def get_balance(self) -> Dict[str, Any]:
@@ -206,13 +232,13 @@ class ExchangeManager:
         try:
             return self.exchange.fetch_balance()
         except Exception as e:
-            print(f"获取余额失败: {e}")
+            logger.error(f"获取余额失败: {e}")
             return {}
     
     def place_test_order(self, side: str, amount: float) -> Dict[str, Any]:
         """模拟下单"""
         current_price = self.get_current_price()
-        print(f"📝 模拟下单: {side} {amount} {self.config.SYMBOL} @ ${current_price:.2f}")
+        logger.info(f"📝 模拟下单: {side} {amount} {self.config.SYMBOL} @ ${current_price:.2f}")
         
         return {
             'id': f"test_order_{int(time.time())}",
@@ -234,10 +260,10 @@ class ExchangeManager:
                 side=side,
                 amount=amount
             )
-            print(f"✅ 订单执行成功: {order['id']}")
+            logger.info(f"✅ 订单执行成功: {order['id']}")
             return order
         except Exception as e:
-            print(f"❌ 下单失败: {e}")
+            logger.error(f"❌ 下单失败: {e}")
             raise
 
 # ====================== 缠论分析器 ======================
@@ -484,7 +510,7 @@ class AIAnalyzer:
         try:
             api_key = os.getenv('DEEPSEEK_API_KEY')
             if not api_key:
-                print("⚠️  DEEPSEEK_API_KEY未设置，AI分析功能将禁用")
+                logger.warning("⚠️  DEEPSEEK_API_KEY未设置，AI分析功能将禁用")
                 self.config.ENABLE_AI_ANALYSIS = False
                 return
             
@@ -492,9 +518,9 @@ class AIAnalyzer:
                 api_key=api_key,
                 base_url="https://api.deepseek.com"
             )
-            print("✅ AI客户端初始化成功")
+            logger.info("✅ AI客户端初始化成功")
         except Exception as e:
-            print(f"❌ AI客户端初始化失败: {e}")
+            logger.error(f"❌ AI客户端初始化失败: {e}")
             self.config.ENABLE_AI_ANALYSIS = False
     
     def analyze_with_chan_theory(self, df: pd.DataFrame, chan_data: Dict) -> Dict[str, Any]:
@@ -562,7 +588,7 @@ class AIAnalyzer:
             return ai_signal
             
         except Exception as e:
-            print(f"❌ AI分析失败: {e}")
+            logger.error(f"❌ AI分析失败: {e}")
             return {
                 'signal': 'HOLD',
                 'reason': 'AI分析失败',
@@ -667,7 +693,7 @@ class AIAnalyzer:
                         'chan_pattern': data.get('chan_pattern', 'unknown')
                     }
         except Exception as e:
-            print(f"❌ 解析AI响应失败: {e}")
+            logger.error(f"❌ 解析AI响应失败: {e}")
         
         # 如果解析失败，尝试提取信号
         if 'BUY' in response.upper():
@@ -708,7 +734,7 @@ class TradingStateManager:
         self.current_mode = new_mode
         self.mode_start_time = datetime.now()
         
-        print(f"🔄 交易模式切换: {old_mode.value} → {new_mode.value}")
+        logger.info(f"🔄 交易模式切换: {old_mode.value} → {new_mode.value}")
         
         # 重置相关状态
         if new_mode == TradingMode.MONITORING:
@@ -729,7 +755,7 @@ class TradingStateManager:
         if (self.current_mode == TradingMode.ENTRY_SCOPING and 
             self.signal_expiry_time and 
             datetime.now() > self.signal_expiry_time):
-            print("⏰ 30分钟信号已过期，返回监控模式")
+            logger.info("⏰ 30分钟信号已过期，返回监控模式")
             self.change_mode(TradingMode.MONITORING)
             return True
         return False
@@ -739,7 +765,7 @@ class TradingStateManager:
         if self.current_mode == TradingMode.ENTRY_SCOPING:
             time_in_mode = (datetime.now() - self.mode_start_time).total_seconds() / 60
             if time_in_mode > 120:  # 2小时超时
-                print(f"⏰ 入场等待超时（{time_in_mode:.0f}分钟），返回监控模式")
+                logger.info(f"⏰ 入场等待超时（{time_in_mode:.0f}分钟），返回监控模式")
                 self.change_mode(TradingMode.MONITORING)
                 return True
         return False
@@ -748,7 +774,7 @@ class TradingStateManager:
         """增加入场尝试次数"""
         self.entry_attempts += 1
         if self.entry_attempts >= 10:  # 最多尝试10次
-            print("🔄 入场尝试次数过多，返回监控模式")
+            logger.info("🔄 入场尝试次数过多，返回监控模式")
             self.change_mode(TradingMode.MONITORING)
     
     def record_trade(self, signal: Dict, amount: float, price: float, side: str):
@@ -792,7 +818,7 @@ class MultiTimeframeAnalyzer:
         
     def analyze_30m_signal(self) -> Dict[str, Any]:
         """分析30分钟级别信号"""
-        print(f"\n📈 开始分析{self.config.SIGNAL_TIMEFRAME}级别信号...")
+        logger.info(f"\n📈 开始分析{self.config.SIGNAL_TIMEFRAME}级别信号...")
         
         df_30m = self.exchange.get_ohlcv(self.config.SIGNAL_TIMEFRAME, limit=50)
         if df_30m.empty:
@@ -852,7 +878,7 @@ class MultiTimeframeAnalyzer:
     
     def analyze_5m_entry(self, buy_zone: Dict[str, Any]) -> Dict[str, Any]:
         """分析5分钟级别精确入场点"""
-        print(f"\n🎯 开始分析{self.config.ENTRY_TIMEFRAME}级别入场点...")
+        logger.info(f"\n🎯 开始分析{self.config.ENTRY_TIMEFRAME}级别入场点...")
         
         df_5m = self.exchange.get_ohlcv(self.config.ENTRY_TIMEFRAME, limit=30)
         if df_5m.empty:
@@ -1030,12 +1056,12 @@ class IntelligentScheduler:
         if mode == TradingMode.MONITORING:
             # 监控模式：每30分钟检查一次30分钟信号
             schedule.every(30).minutes.do(self.execute_monitoring_task)
-            print(f"⏰ 设置调度：每30分钟检查一次{self.config.SIGNAL_TIMEFRAME}信号")
+            logger.info(f"⏰ 设置调度：每30分钟检查一次{self.config.SIGNAL_TIMEFRAME}信号")
             
         elif mode == TradingMode.ENTRY_SCOPING:
             # 入场侦察模式：每5分钟检查一次5分钟入场点
             schedule.every(5).minutes.do(self.execute_entry_scoping_task)
-            print(f"⏰ 设置调度：每5分钟检查一次{self.config.ENTRY_TIMEFRAME}入场点")
+            logger.info(f"⏰ 设置调度：每5分钟检查一次{self.config.ENTRY_TIMEFRAME}入场点")
             
             # 同时每30分钟检查一次信号是否依然有效
             schedule.every(30).minutes.do(self.check_signal_validity)
@@ -1043,27 +1069,27 @@ class IntelligentScheduler:
         elif mode == TradingMode.IN_POSITION:
             # 持仓模式：每5分钟检查一次离场信号
             schedule.every(5).minutes.do(self.execute_exit_check_task)
-            print(f"⏰ 设置调度：每5分钟检查一次离场信号")
+            logger.info(f"⏰ 设置调度：每5分钟检查一次离场信号")
             
         elif mode == TradingMode.COOLDOWN:
             # 冷却模式：不执行交易任务
-            print(f"⏰ 冷却模式，暂停交易任务")
+            logger.info(f"⏰ 冷却模式，暂停交易任务")
             # 30分钟后返回监控模式
             schedule.every(30).minutes.do(self.return_to_monitoring)
     
     def execute_monitoring_task(self):
         """执行监控任务"""
-        print(f"\n🔍 执行监控任务 - {datetime.now().strftime('%H:%M:%S')}")
+        logger.info(f"\n🔍 执行监控任务 - {datetime.now().strftime('%H:%M:%S')}")
         
         # 1. 分析30分钟信号
         signal_result = self.analyzer.analyze_30m_signal()
         
         # 2. 如果有买点信号，切换到入场侦察模式
         if signal_result['signal'] == 'BUY' and signal_result['confidence'] > 0.6:
-            print(f"✅ 发现{self.config.SIGNAL_TIMEFRAME}买点信号!")
-            print(f"   理由: {signal_result['reason']}")
-            print(f"   信心: {signal_result['confidence']:.1%}")
-            print(f"   买点区域: {signal_result['buy_zone']['low']:.2f} - {signal_result['buy_zone']['high']:.2f}")
+            logger.info(f"✅ 发现{self.config.SIGNAL_TIMEFRAME}买点信号!")
+            logger.info(f"   理由: {signal_result['reason']}")
+            logger.info(f"   信心: {signal_result['confidence']:.1%}")
+            logger.info(f"   买点区域: {signal_result['buy_zone']['low']:.2f} - {signal_result['buy_zone']['high']:.2f}")
             
             # 更新状态管理器
             self.state_manager.signal_30m = signal_result
@@ -1072,14 +1098,14 @@ class IntelligentScheduler:
             # 重新设置调度
             self.setup_schedule()
         else:
-            print(f"📊 {self.config.SIGNAL_TIMEFRAME}信号: {signal_result['signal']}")
-            print(f"   理由: {signal_result.get('reason', '无明确信号')}")
-            print(f"   当前价格: ${signal_result.get('current_price', 0):.2f}")
-            print(f"   当前趋势: {signal_result.get('trend', 'unknown')}")
+            logger.info(f"📊 {self.config.SIGNAL_TIMEFRAME}信号: {signal_result['signal']}")
+            logger.info(f"   理由: {signal_result.get('reason', '无明确信号')}")
+            logger.info(f"   当前价格: ${signal_result.get('current_price', 0):.2f}")
+            logger.info(f"   当前趋势: {signal_result.get('trend', 'unknown')}")
     
     def execute_entry_scoping_task(self):
         """执行入场侦察任务"""
-        print(f"\n🎯 执行入场侦察任务 - {datetime.now().strftime('%H:%M:%S')}")
+        logger.info(f"\n🎯 执行入场侦察任务 - {datetime.now().strftime('%H:%M:%S')}")
         
         # 检查信号有效期和超时
         if (self.state_manager.check_signal_expiry() or 
@@ -1095,11 +1121,11 @@ class IntelligentScheduler:
         current_price = self.exchange.get_current_price()
         
         if entry_result['entry_signal'] == 'BUY':
-            print(f"🎯 发现{self.config.ENTRY_TIMEFRAME}精确入场点!")
-            print(f"   入场价格: {entry_result['entry_price']:.2f}")
-            print(f"   信号信心: {entry_result['confidence']:.1%}")
-            print(f"   止损: {entry_result['stop_loss']:.2f}")
-            print(f"   止盈: {entry_result['take_profit']:.2f}")
+            logger.info(f"🎯 发现{self.config.ENTRY_TIMEFRAME}精确入场点!")
+            logger.info(f"   入场价格: {entry_result['entry_price']:.2f}")
+            logger.info(f"   信号信心: {entry_result['confidence']:.1%}")
+            logger.info(f"   止损: {entry_result['stop_loss']:.2f}")
+            logger.info(f"   止盈: {entry_result['take_profit']:.2f}")
             
             # 使用AI进行最终确认
             if self.config.ENABLE_AI_ANALYSIS:
@@ -1116,8 +1142,8 @@ class IntelligentScheduler:
                     ai_signal = self.ai_analyzer.analyze_with_chan_theory(df_5m, chan_data)
                     
                     if ai_signal['signal'] == 'BUY' and ai_signal['confidence'] > 0.6:
-                        print(f"🤖 AI确认: {ai_signal['reason']}")
-                        print(f"   AI信心: {ai_signal['confidence']:.1%}")
+                        logger.info(f"🤖 AI确认: {ai_signal['reason']}")
+                        logger.info(f"   AI信心: {ai_signal['confidence']:.1%}")
                         
                         # 合并AI分析结果
                         entry_result.update({
@@ -1126,7 +1152,7 @@ class IntelligentScheduler:
                             'ai_chan_pattern': ai_signal.get('chan_pattern', 'unknown')
                         })
                     else:
-                        print(f"🤖 AI建议谨慎: {ai_signal['reason']}")
+                        logger.warning(f"🤖 AI建议谨慎: {ai_signal['reason']}")
                         # 如果AI信心不足，可以降低入场信心
                         entry_result['confidence'] *= 0.7
             
@@ -1134,25 +1160,25 @@ class IntelligentScheduler:
             if entry_result['confidence'] > 0.6:  # 信心阈值
                 self.execute_entry_trade(entry_result)
             else:
-                print("⚠️ 信心不足，放弃本次入场机会")
+                logger.warning("⚠️ 信心不足，放弃本次入场机会")
                 self.state_manager.increment_entry_attempts()
                 
         elif entry_result['entry_signal'] == 'PREPARE_BUY':
-            print(f"⚠️ 准备入场: {entry_result['reason']}")
-            print(f"   当前价格: ${current_price:.2f}")
-            print(f"   买点区域: {self.state_manager.signal_30m['buy_zone']['low']:.2f} - "
-                  f"{self.state_manager.signal_30m['buy_zone']['high']:.2f}")
+            logger.warning(f"⚠️ 准备入场: {entry_result['reason']}")
+            logger.warning(f"   当前价格: ${current_price:.2f}")
+            logger.warning(f"   买点区域: {self.state_manager.signal_30m['buy_zone']['low']:.2f} - "
+                          f"{self.state_manager.signal_30m['buy_zone']['high']:.2f}")
             self.state_manager.increment_entry_attempts()
             
         else:
-            print(f"⌛ {entry_result['reason']}")
-            print(f"   当前价格: ${current_price:.2f}")
-            print(f"   买点区域: {self.state_manager.signal_30m['buy_zone']['low']:.2f} - "
-                  f"{self.state_manager.signal_30m['buy_zone']['high']:.2f}")
+            logger.info(f"⌛ {entry_result['reason']}")
+            logger.info(f"   当前价格: ${current_price:.2f}")
+            logger.info(f"   买点区域: {self.state_manager.signal_30m['buy_zone']['low']:.2f} - "
+                        f"{self.state_manager.signal_30m['buy_zone']['high']:.2f}")
     
     def execute_entry_trade(self, entry_result: Dict[str, Any]):
         """执行入场交易"""
-        print(f"\n💰 执行入场交易...")
+        logger.info(f"\n💰 执行入场交易...")
         
         # 计算交易量
         trade_amount = self.config.TRADE_AMOUNT
@@ -1185,17 +1211,17 @@ class IntelligentScheduler:
         self.state_manager.change_mode(TradingMode.IN_POSITION)
         self.setup_schedule()
         
-        print(f"✅ 入场交易完成!")
-        print(f"   入场价格: ${entry_result['entry_price']:.2f}")
-        print(f"   交易数量: {trade_amount:.4f} BTC")
-        print(f"   订单ID: {order.get('id', 'N/A')}")
+        logger.info(f"✅ 入场交易完成!")
+        logger.info(f"   入场价格: ${entry_result['entry_price']:.2f}")
+        logger.info(f"   交易数量: {trade_amount:.4f} BTC")
+        logger.info(f"   订单ID: {order.get('id', 'N/A')}")
     
     def execute_exit_check_task(self):
         """执行离场检查任务"""
-        print(f"\n🚪 执行离场检查 - {datetime.now().strftime('%H:%M:%S')}")
+        logger.info(f"\n🚪 执行离场检查 - {datetime.now().strftime('%H:%M:%S')}")
         
         if not self.state_manager.position:
-            print("❌ 无持仓信息，返回监控模式")
+            logger.error("❌ 无持仓信息，返回监控模式")
             self.state_manager.change_mode(TradingMode.MONITORING)
             self.setup_schedule()
             return
@@ -1212,24 +1238,24 @@ class IntelligentScheduler:
         else:
             unrealized_pnl = (position['entry_price'] - current_price) * position['amount']
         
-        print(f"📊 持仓状态:")
-        print(f"   方向: {position['side']}")
-        print(f"   入场价: ${position['entry_price']:.2f}")
-        print(f"   当前价: ${current_price:.2f}")
-        print(f"   浮动盈亏: ${unrealized_pnl:.2f}")
+        logger.info(f"📊 持仓状态:")
+        logger.info(f"   方向: {position['side']}")
+        logger.info(f"   入场价: ${position['entry_price']:.2f}")
+        logger.info(f"   当前价: ${current_price:.2f}")
+        logger.info(f"   浮动盈亏: ${unrealized_pnl:.2f}")
         
         if exit_result['exit_signal'] in ['BUY', 'SELL']:
-            print(f"🚪 发现离场信号: {exit_result['reason']}")
-            print(f"   信号信心: {exit_result['confidence']:.1%}")
+            logger.info(f"🚪 发现离场信号: {exit_result['reason']}")
+            logger.info(f"   信号信心: {exit_result['confidence']:.1%}")
             
             # 执行离场
             self.execute_exit_trade(exit_result)
         else:
-            print(f"📊 {exit_result['reason']}")
+            logger.info(f"📊 {exit_result['reason']}")
     
     def execute_exit_trade(self, exit_result: Dict[str, Any]):
         """执行离场交易"""
-        print(f"\n💰 执行离场交易...")
+        logger.info(f"\n💰 执行离场交易...")
         
         position = self.state_manager.position
         trade_amount = position['amount']
@@ -1256,10 +1282,10 @@ class IntelligentScheduler:
             exit_result, trade_amount, current_price, exit_side
         )
         
-        print(f"✅ 离场交易完成!")
-        print(f"   离场价格: ${current_price:.2f}")
-        print(f"   盈亏: ${pnl:.2f} ({pnl_pct:+.2f}%)")
-        print(f"   理由: {exit_result['reason']}")
+        logger.info(f"✅ 离场交易完成!")
+        logger.info(f"   离场价格: ${current_price:.2f}")
+        logger.info(f"   盈亏: ${pnl:.2f} ({pnl_pct:+.2f}%)")
+        logger.info(f"   理由: {exit_result['reason']}")
         
         # 切换到冷却模式
         self.state_manager.change_mode(TradingMode.COOLDOWN)
@@ -1272,14 +1298,14 @@ class IntelligentScheduler:
             current_signal = self.analyzer.analyze_30m_signal()
             
             if current_signal['signal'] != 'BUY' or current_signal['confidence'] < 0.4:
-                print("❌ 30分钟买点信号已失效，返回监控模式")
+                logger.info("❌ 30分钟买点信号已失效，返回监控模式")
                 self.state_manager.change_mode(TradingMode.MONITORING)
                 self.setup_schedule()
     
     def return_to_monitoring(self):
         """从冷却模式返回监控模式"""
         if self.state_manager.current_mode == TradingMode.COOLDOWN:
-            print("🔄 冷却结束，返回监控模式")
+            logger.info("🔄 冷却结束，返回监控模式")
             self.state_manager.change_mode(TradingMode.MONITORING)
             self.setup_schedule()
 
@@ -1290,7 +1316,7 @@ class ChanTradingBot:
     def __init__(self, config: Config):
         self.config = config
         
-        print("🚀 初始化缠论交易机器人...")
+        logger.info("🚀 初始化缠论交易机器人...")
         
         # 初始化各模块
         self.exchange = ExchangeManager(config)
@@ -1302,13 +1328,13 @@ class ChanTradingBot:
             self.exchange, self.ai_analyzer
         )
         
-        print("✅ 交易机器人初始化完成!")
+        logger.info("✅ 交易机器人初始化完成!")
     
     def display_status(self):
         """显示机器人状态"""
-        print("\n" + "="*60)
-        print(f"🤖 BTC缠论交易机器人状态 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info(f"🤖 BTC缠论交易机器人状态 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("="*60)
         
         # 显示模式
         mode = self.state_manager.current_mode
@@ -1319,29 +1345,29 @@ class ChanTradingBot:
             TradingMode.COOLDOWN: "🛌"
         }
         
-        print(f"交易模式: {mode_icons[mode]} {mode.value}")
-        print(f"持续时间: {self.state_manager.get_mode_duration():.1f}分钟")
+        logger.info(f"交易模式: {mode_icons[mode]} {mode.value}")
+        logger.info(f"持续时间: {self.state_manager.get_mode_duration():.1f}分钟")
         
         # 显示信号信息
         if mode == TradingMode.ENTRY_SCOPING and self.state_manager.signal_30m:
             signal = self.state_manager.signal_30m
-            print(f"\n📈 30分钟信号:")
-            print(f"  类型: {signal['signal']}")
-            print(f"  理由: {signal['reason']}")
-            print(f"  信心: {signal['confidence']:.1%}")
-            print(f"  买点区域: {signal['buy_zone']['low']:.2f} - {signal['buy_zone']['high']:.2f}")
-            print(f"  入场尝试: {self.state_manager.entry_attempts}次")
+            logger.info(f"\n📈 30分钟信号:")
+            logger.info(f"  类型: {signal['signal']}")
+            logger.info(f"  理由: {signal['reason']}")
+            logger.info(f"  信心: {signal['confidence']:.1%}")
+            logger.info(f"  买点区域: {signal['buy_zone']['low']:.2f} - {signal['buy_zone']['high']:.2f}")
+            logger.info(f"  入场尝试: {self.state_manager.entry_attempts}次")
         
         # 显示持仓信息
         if mode == TradingMode.IN_POSITION and self.state_manager.position:
             position = self.state_manager.position
             current_price = self.exchange.get_current_price()
             
-            print(f"\n💰 持仓信息:")
-            print(f"  方向: {position['side']}")
-            print(f"  入场价: ${position['entry_price']:.2f}")
-            print(f"  当前价: ${current_price:.2f}")
-            print(f"  数量: {position['amount']:.4f} BTC")
+            logger.info(f"\n💰 持仓信息:")
+            logger.info(f"  方向: {position['side']}")
+            logger.info(f"  入场价: ${position['entry_price']:.2f}")
+            logger.info(f"  当前价: ${current_price:.2f}")
+            logger.info(f"  数量: {position['amount']:.4f} BTC")
             
             # 计算盈亏
             if position['side'] == 'long':
@@ -1351,9 +1377,9 @@ class ChanTradingBot:
                 pnl = (position['entry_price'] - current_price) * position['amount']
                 pnl_pct = (position['entry_price'] - current_price) / position['entry_price'] * 100
             
-            print(f"  浮动盈亏: ${pnl:.2f} ({pnl_pct:+.2f}%)")
-            print(f"  止损: ${position['stop_loss']:.2f}")
-            print(f"  止盈: ${position['take_profit']:.2f}")
+            logger.info(f"  浮动盈亏: ${pnl:.2f} ({pnl_pct:+.2f}%)")
+            logger.info(f"  止损: ${position['stop_loss']:.2f}")
+            logger.info(f"  止盈: ${position['take_profit']:.2f}")
         
         # 显示账户信息
         try:
@@ -1361,48 +1387,48 @@ class ChanTradingBot:
             usdt_balance = balance.get('USDT', {}).get('free', 0)
             current_price = self.exchange.get_current_price()
             
-            print(f"\n💼 账户信息:")
-            print(f"  USDT余额: ${usdt_balance:.2f}")
-            print(f"  当前价格: ${current_price:,.2f}")
+            logger.info(f"\n💼 账户信息:")
+            logger.info(f"  USDT余额: ${usdt_balance:.2f}")
+            logger.info(f"  当前价格: ${current_price:,.2f}")
         except:
             pass
         
         # 显示交易历史
         if self.state_manager.trade_history:
             recent_trades = self.state_manager.trade_history[-3:]  # 最近3笔
-            print(f"\n📋 最近交易:")
+            logger.info(f"\n📋 最近交易:")
             for trade in recent_trades:
                 time_str = trade['timestamp'].strftime('%H:%M')
-                print(f"  {time_str} {trade['side']} {trade['amount']:.4f} @ ${trade['price']:.2f}")
+                logger.info(f"  {time_str} {trade['side']} {trade['amount']:.4f} @ ${trade['price']:.2f}")
         
-        print("="*60)
+        logger.info("="*60)
     
     def start(self):
         """启动交易机器人"""
-        print("\n" + "="*60)
-        print("🚀 启动缠论交易机器人")
-        print("="*60)
-        print(f"交易对: {self.config.SYMBOL}")
-        print(f"模式: {'模拟' if self.config.TEST_MODE else '实盘'}")
-        print(f"信号框架: {self.config.SIGNAL_TIMEFRAME}")
-        print(f"入场框架: {self.config.ENTRY_TIMEFRAME}")
-        print(f"AI分析: {'启用' if self.config.ENABLE_AI_ANALYSIS else '禁用'}")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("🚀 启动缠论交易机器人")
+        logger.info("="*60)
+        logger.info(f"交易对: {self.config.SYMBOL}")
+        logger.info(f"模式: {'模拟' if self.config.TEST_MODE else '实盘'}")
+        logger.info(f"信号框架: {self.config.SIGNAL_TIMEFRAME}")
+        logger.info(f"入场框架: {self.config.ENTRY_TIMEFRAME}")
+        logger.info(f"AI分析: {'启用' if self.config.ENABLE_AI_ANALYSIS else '禁用'}")
+        logger.info("="*60)
         
         # 设置初始调度
         self.scheduler.setup_schedule()
         
         # 立即执行一次监控任务
-        print("\n🔍 执行初始监控...")
+        logger.info("\n🔍 执行初始监控...")
         self.scheduler.execute_monitoring_task()
         
         # 显示初始状态
         self.display_status()
         
-        print("\n🔄 机器人运行中...")
-        print("  按 Ctrl+C 停止程序")
-        print("  按 's' 查看状态")
-        print("-"*60)
+        logger.info("\n🔄 机器人运行中...")
+        logger.info("  按 Ctrl+C 停止程序")
+        logger.info("  按 's' 查看状态")
+        logger.info("-"*60)
         
         # 主循环
         last_status_time = time.time()
@@ -1421,18 +1447,18 @@ class ChanTradingBot:
                 time.sleep(1)
                 
         except KeyboardInterrupt:
-            print("\n\n👋 正在停止交易机器人...")
+            logger.info("\n\n👋 正在停止交易机器人...")
             schedule.clear()
-            print("✅ 交易机器人已安全停止")
+            logger.info("✅ 交易机器人已安全停止")
 
 # ====================== 主函数 ======================
 def main():
     """主函数"""
     # 欢迎信息
-    print("="*60)
-    print("🤖 BTC/USDT 缠论+AI 自动交易机器人")
-    print("版本: 1.0.0 | 作者: AI交易助手")
-    print("="*60)
+    logger.info("="*60)
+    logger.info("🤖 BTC/USDT 缠论+AI 自动交易机器人")
+    logger.info("版本: 1.0.0 | 作者: AI交易助手")
+    logger.info("="*60)
     
     # 创建配置
     config = Config()
@@ -1440,26 +1466,26 @@ def main():
     # 检查环境变量
     if not config.TEST_MODE:
         if not os.getenv('BINANCE_API_KEY') or not os.getenv('BINANCE_SECRET'):
-            print("❌ 实盘模式需要设置BINANCE_API_KEY和BINANCE_SECRET环境变量")
-            print("请创建.env文件或在环境中设置这些变量")
+            logger.error("❌ 实盘模式需要设置BINANCE_API_KEY和BINANCE_SECRET环境变量")
+            logger.error("请创建.env文件或在环境中设置这些变量")
             return
     
     if config.ENABLE_AI_ANALYSIS and not os.getenv('DEEPSEEK_API_KEY'):
-        print("⚠️  DEEPSEEK_API_KEY未设置，AI分析功能将禁用")
+        logger.warning("⚠️  DEEPSEEK_API_KEY未设置，AI分析功能将禁用")
         config.ENABLE_AI_ANALYSIS = False
     
     # 确认启动
-    print(f"配置确认:")
-    print(f"  交易模式: {'模拟' if config.TEST_MODE else '实盘'}")
-    print(f"  交易对: {config.SYMBOL}")
-    print(f"  杠杆: {config.LEVERAGE}x")
-    print(f"  时间框架: {config.SIGNAL_TIMEFRAME} -> {config.ENTRY_TIMEFRAME}")
-    print(f"  AI分析: {'启用' if config.ENABLE_AI_ANALYSIS else '禁用'}")
+    logger.info(f"配置确认:")
+    logger.info(f"  交易模式: {'模拟' if config.TEST_MODE else '实盘'}")
+    logger.info(f"  交易对: {config.SYMBOL}")
+    logger.info(f"  杠杆: {config.LEVERAGE}x")
+    logger.info(f"  时间框架: {config.SIGNAL_TIMEFRAME} -> {config.ENTRY_TIMEFRAME}")
+    logger.info(f"  AI分析: {'启用' if config.ENABLE_AI_ANALYSIS else '禁用'}")
     
     if not config.TEST_MODE:
         confirm = input("\n🔴 警告: 实盘模式会真实下单! 确认继续? (y/N): ")
         if confirm.lower() != 'y':
-            print("取消启动")
+            logger.info("取消启动")
             return
     
     # 创建并启动机器人
@@ -1468,7 +1494,7 @@ def main():
     try:
         bot.start()
     except Exception as e:
-        print(f"\n❌ 机器人运行出错: {e}")
+        logger.error(f"\n❌ 机器人运行出错: {e}")
         import traceback
         traceback.print_exc()
         schedule.clear()

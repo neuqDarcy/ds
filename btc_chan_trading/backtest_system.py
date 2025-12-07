@@ -17,6 +17,31 @@ from typing import Dict, List, Optional, Tuple, Any
 import warnings
 warnings.filterwarnings('ignore')
 
+# 导入日志模块
+import logging
+import os
+from datetime import datetime
+
+# 配置日志系统
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+
+# 生成带时间戳的日志文件名
+log_filename = f"backtest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+log_path = os.path.join(log_dir, log_filename)
+
+# 配置 logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_path, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
 # 导入 btc_chan_trading 中的交易信号分析类
 from btc_chan_trading import ChanTheoryAnalyzer, Config
 
@@ -63,13 +88,13 @@ class RealDataFetcher:
         
         # 检查缓存
         if use_cache and os.path.exists(cache_file):
-            print(f"📂 从缓存加载数据: {cache_file}")
+            logger.info(f"📂 从缓存加载数据: {cache_file}")
             df = pd.read_csv(cache_file)
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             return df
         
-        print(f"📡 从Binance获取数据: {symbol} {timeframe}")
-        print(f"   时间范围: {start_date} 到 {end_date}")
+        logger.info(f"📡 从Binance获取数据: {symbol} {timeframe}")
+        logger.info(f"   时间范围: {start_date} 到 {end_date}")
         
         # 转换日期为时间戳
         start_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
@@ -131,19 +156,19 @@ class RealDataFetcher:
                 
                 # 显示进度
                 if batch_count % 5 == 0:
-                    print(f"  已获取 {len(df_batch) * batch_count} 根K线，最新时间: {last_timestamp}")
+                    logger.info(f"  已获取 {len(df_batch) * batch_count} 根K线，最新时间: {last_timestamp}")
                 
                 # 检查是否已经超过结束时间
                 if last_timestamp >= end_dt:
                     break
                     
             except Exception as e:
-                print(f"❌ 获取数据失败: {e}")
-                print(f"   当前since: {current_since}")
+                logger.error(f"❌ 获取数据失败: {e}")
+                logger.error(f"   当前since: {current_since}")
                 break
         
         if not all_data:
-            print("❌ 未获取到任何数据")
+            logger.error("❌ 未获取到任何数据")
             return pd.DataFrame()
         
         # 合并所有数据
@@ -156,13 +181,13 @@ class RealDataFetcher:
         # 添加技术指标
         df = self.add_technical_indicators(df)
         
-        print(f"✅ 数据获取完成，共 {len(df)} 根K线")
-        print(f"   时间范围: {df['timestamp'].iloc[0]} 到 {df['timestamp'].iloc[-1]}")
+        logger.info(f"✅ 数据获取完成，共 {len(df)} 根K线")
+        logger.info(f"   时间范围: {df['timestamp'].iloc[0]} 到 {df['timestamp'].iloc[-1]}")
         
         # 保存到缓存
         if use_cache:
             df.to_csv(cache_file, index=False)
-            print(f"💾 数据已缓存: {cache_file}")
+            logger.info(f"💾 数据已缓存: {cache_file}")
         
         return df
     
@@ -250,18 +275,18 @@ class RealBacktestConfig:
     
     def interactive_setup(self):
         """交互式配置向导"""
-        print("\n" + "="*60)
-        print("🤖 真实数据回测系统 - 配置向导")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("🤖 真实数据回测系统 - 配置向导")
+        logger.info("="*60)
         
         data_fetcher = RealDataFetcher()
         
         # 1. 选择交易对
-        print("\n1. 选择交易对:")
+        logger.info("\n1. 选择交易对:")
         available_symbols = data_fetcher.get_available_symbols()[:10]  # 显示前10个
         for i, sym in enumerate(available_symbols, 1):
-            print(f"   {i}. {sym}")
-        print(f"   {len(available_symbols)+1}. 手动输入")
+            logger.info(f"   {i}. {sym}")
+        logger.info(f"   {len(available_symbols)+1}. 手动输入")
         
         symbol_choice = input(f"\n   请选择交易对 (1-{len(available_symbols)+1}，默认1): ").strip()
         if symbol_choice and symbol_choice.isdigit():
@@ -274,11 +299,11 @@ class RealBacktestConfig:
             self.symbol = available_symbols[0]
         
         # 2. 选择时间框架
-        print("\n2. 选择时间框架:")
+        logger.info("\n2. 选择时间框架:")
         timeframes = data_fetcher.get_available_timeframes()
         for i, tf in enumerate(timeframes[:10], 1):
-            print(f"   {i}. {tf}")
-        print(f"   {len(timeframes[:10])+1}. 手动输入")
+            logger.info(f"   {i}. {tf}")
+        logger.info(f"   {len(timeframes[:10])+1}. 手动输入")
         
         tf_choice = input(f"\n   请选择时间框架 (1-{len(timeframes[:10])+1}，默认5): ").strip()
         if tf_choice and tf_choice.isdigit():
@@ -291,8 +316,8 @@ class RealBacktestConfig:
             self.timeframe = timeframes[4]  # 默认30m
         
         # 3. 设置时间范围
-        print("\n3. 设置回测时间范围:")
-        print("   格式: YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD")
+        logger.info("\n3. 设置回测时间范围:")
+        logger.info("   格式: YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD")
         
         start_input = input(f"   开始日期 (默认: {self.start_date}): ").strip()
         if start_input:
@@ -309,7 +334,7 @@ class RealBacktestConfig:
                 self.end_date = end_input
         
         # 4. 设置资金参数
-        print("\n4. 设置资金参数:")
+        logger.info("\n4. 设置资金参数:")
         capital_input = input(f"   初始资金 (默认: {self.initial_capital}): ").strip()
         if capital_input:
             self.initial_capital = float(capital_input)
@@ -319,7 +344,7 @@ class RealBacktestConfig:
             self.trade_amount = float(amount_input)
         
         # 5. 设置风险参数
-        print("\n5. 设置风险参数:")
+        logger.info("\n5. 设置风险参数:")
         sl_input = input(f"   止损百分比 (默认: {self.stop_loss_pct}%): ").strip()
         if sl_input:
             self.stop_loss_pct = float(sl_input)
@@ -329,7 +354,7 @@ class RealBacktestConfig:
             self.take_profit_pct = float(tp_input)
         
         # 6. 设置缠论参数
-        print("\n6. 设置缠论参数:")
+        logger.info("\n6. 设置缠论参数:")
         fractal_input = input(f"   分型周期 (默认: {self.fractal_period}): ").strip()
         if fractal_input:
             self.fractal_period = int(fractal_input)
@@ -339,7 +364,7 @@ class RealBacktestConfig:
             self.confidence_threshold = float(confidence_input)
         
         # 7. 设置其他选项
-        print("\n7. 设置其他选项:")
+        logger.info("\n7. 设置其他选项:")
         entry_scoping = input("   启用5分钟精确入场? (y/n, 默认: y): ").strip().lower()
         self.enable_entry_scoping = entry_scoping != 'n'
         
@@ -349,14 +374,14 @@ class RealBacktestConfig:
         plot_input = input("   生成图表? (y/n, 默认: y): ").strip().lower()
         self.plot_results = plot_input != 'n'
         
-        print("\n✅ 配置完成!")
+        logger.info("\n✅ 配置完成!")
         return self
     
     def display(self):
         """显示配置"""
-        print("\n" + "="*60)
-        print("📋 回测配置详情")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("📋 回测配置详情")
+        logger.info("="*60)
         
         config_dict = {
             "交易对": self.symbol,
@@ -376,9 +401,9 @@ class RealBacktestConfig:
         }
         
         for key, value in config_dict.items():
-            print(f"  {key}: {value}")
+            logger.info(f"  {key}: {value}")
         
-        print("="*60)
+        logger.info("="*60)
 
 # ====================== 真实缠论回测引擎 ======================
 class RealChanBacktestEngine:
@@ -411,14 +436,14 @@ class RealChanBacktestEngine:
         self.position = None
         self.position_entry_price = 0.0
         
-        print(f"🚀 初始化真实数据回测引擎")
-        print(f"   交易对: {config.symbol}")
-        print(f"   时间框架: {config.timeframe}")
-        print(f"   时间范围: {config.start_date} 到 {config.end_date}")
+        logger.info(f"🚀 初始化真实数据回测引擎")
+        logger.info(f"   交易对: {config.symbol}")
+        logger.info(f"   时间框架: {config.timeframe}")
+        logger.info(f"   时间范围: {config.start_date} 到 {config.end_date}")
     
     def load_real_data(self) -> pd.DataFrame:
         """加载真实历史数据"""
-        print("\n📊 加载历史数据...")
+        logger.info("\n📊 加载历史数据...")
         
         df = self.data_fetcher.get_historical_ohlcv(
             symbol=self.config.symbol,
@@ -429,15 +454,15 @@ class RealChanBacktestEngine:
         )
         
         if df.empty:
-            print("❌ 数据加载失败")
+            logger.error("❌ 数据加载失败")
             return df
         
         # 显示数据统计
-        print(f"\n📈 数据统计:")
-        print(f"   数据条数: {len(df)}")
-        print(f"   时间范围: {df['timestamp'].iloc[0]} 到 {df['timestamp'].iloc[-1]}")
-        print(f"   价格范围: ${df['low'].min():.2f} - ${df['high'].max():.2f}")
-        print(f"   平均成交量: {df['volume'].mean():.2f}")
+        logger.info(f"\n📈 数据统计:")
+        logger.info(f"   数据条数: {len(df)}")
+        logger.info(f"   时间范围: {df['timestamp'].iloc[0]} 到 {df['timestamp'].iloc[-1]}")
+        logger.info(f"   价格范围: ${df['low'].min():.2f} - ${df['high'].max():.2f}")
+        logger.info(f"   平均成交量: {df['volume'].mean():.2f}")
         
         return df
     
@@ -463,7 +488,7 @@ class RealChanBacktestEngine:
         # 检查资金是否足够
         if trade_value + fee > self.capital:
             if self.config.verbose:
-                print(f"❌ 资金不足，无法买入。需要: {trade_value+fee:.2f}，可用: {self.capital:.2f}")
+                logger.info(f"❌ 资金不足，无法买入。需要: {trade_value+fee:.2f}，可用: {self.capital:.2f}")
             return False
         
         # 更新持仓
@@ -496,9 +521,9 @@ class RealChanBacktestEngine:
         self.trades.append(trade_record)
         
         if self.config.verbose:
-            print(f"💰 [{timestamp.strftime('%Y-%m-%d %H:%M')}] 买入: {position_amount:.4f} BTC @ ${actual_price:.2f}")
-            print(f"    交易金额: ${trade_value:.2f}，手续费: ${fee:.2f}")
-            print(f"    现金余额: ${self.capital:.2f}，BTC持仓: {self.btc_amount:.4f}")
+            logger.info(f"💰 [{timestamp.strftime('%Y-%m-%d %H:%M')}] 买入: {position_amount:.4f} BTC @ ${actual_price:.2f}")
+            logger.info(f"    交易金额: ${trade_value:.2f}，手续费: ${fee:.2f}")
+            logger.info(f"    现金余额: ${self.capital:.2f}，BTC持仓: {self.btc_amount:.4f}")
         
         return True
     
@@ -506,7 +531,7 @@ class RealChanBacktestEngine:
         """执行卖出"""
         if self.btc_amount <= 0:
             if self.config.verbose:
-                print("❌ 无BTC持仓，无法卖出")
+                logger.info("❌ 无BTC持仓，无法卖出")
             return False
         
         # 计算考虑滑点的实际价格
@@ -545,10 +570,10 @@ class RealChanBacktestEngine:
             self.trades.append(trade_record)
             
             if self.config.verbose:
-                print(f"💰 [{timestamp.strftime('%Y-%m-%d %H:%M')}] 卖出: {position_amount:.4f} BTC @ ${actual_price:.2f}")
-                print(f"    交易金额: ${trade_value:.2f}，手续费: ${fee:.2f}")
-                print(f"    盈亏: ${pnl:.2f} ({pnl_pct:+.2f}%)")
-                print(f"    现金余额: ${self.capital:.2f}，BTC持仓: {self.btc_amount:.4f}")
+                logger.info(f"💰 [{timestamp.strftime('%Y-%m-%d %H:%M')}] 卖出: {position_amount:.4f} BTC @ ${actual_price:.2f}")
+                logger.info(f"    交易金额: ${trade_value:.2f}，手续费: ${fee:.2f}")
+                logger.info(f"    盈亏: ${pnl:.2f} ({pnl_pct:+.2f}%)")
+                logger.info(f"    现金余额: ${self.capital:.2f}，BTC持仓: {self.btc_amount:.4f}")
             
             # 清空持仓
             self.position = None
@@ -734,16 +759,16 @@ class RealChanBacktestEngine:
     
     def run_backtest(self):
         """运行回测"""
-        print("\n" + "="*60)
-        print("🚀 开始真实数据缠论回测")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("🚀 开始真实数据缠论回测")
+        logger.info("="*60)
         
         # 加载数据
         df = self.load_real_data()
         if df.empty:
             return None
         
-        print(f"\n🔍 执行回测分析...")
+        logger.info(f"\n🔍 执行回测分析...")
         
         # 需要足够的数据才能开始分析
         start_idx = max(20, self.config.fractal_period + 5)
@@ -756,7 +781,7 @@ class RealChanBacktestEngine:
             # 显示进度
             if idx % 100 == 0 and self.config.verbose:
                 progress = (idx - start_idx) / (len(df) - start_idx) * 100
-                print(f"  进度: {progress:.1f}% ({idx}/{len(df)})，价格: ${current_price:.2f}")
+                logger.info(f"  进度: {progress:.1f}% ({idx}/{len(df)})，价格: ${current_price:.2f}")
             
             # 检查止损止盈
             if self.position and self.check_stop_loss_take_profit(current_price, current_time):
@@ -805,7 +830,7 @@ class RealChanBacktestEngine:
             }
             self.execute_sell(last_price, df.iloc[-1]['timestamp'], signal)
         
-        print("\n✅ 回测完成!")
+        logger.info("\n✅ 回测完成!")
         
         return self.generate_report(df)
     
@@ -896,7 +921,7 @@ class RealChanBacktestEngine:
     def plot_results(self, report: Dict[str, Any]):
         """绘制回测结果图表"""
         if not report or not self.equity_history:
-            print("❌ 没有回测数据可绘制")
+            logger.error("❌ 没有回测数据可绘制")
             return
         
         fig, axes = plt.subplots(3, 2, figsize=(16, 12))
@@ -1021,7 +1046,7 @@ class RealChanBacktestEngine:
             symbol_clean = self.config.symbol.replace('/', '_')
             filename = f"{outer_reports_dir}/{symbol_clean}_backtest_{timestamp}.png"
             plt.savefig(filename, dpi=300, bbox_inches='tight')
-            print(f"📈 图表已保存: {filename}")
+            logger.info(f"📈 图表已保存: {filename}")
         
         plt.show()
     
@@ -1029,52 +1054,52 @@ class RealChanBacktestEngine:
         """打印回测报告"""
         summary = report['summary']
         
-        print("\n" + "="*60)
-        print("📊 缠论策略回测报告")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("📊 缠论策略回测报告")
+        logger.info("="*60)
         
-        print(f"📈 策略表现:")
-        print(f"   初始资金: ${summary['initial_capital']:,.2f}")
-        print(f"   最终权益: ${summary['final_equity']:,.2f}")
-        print(f"   总收益率: {summary['total_return_pct']:+.2f}%")
-        print(f"   年化收益率: {summary['annual_return_pct']:+.2f}%")
+        logger.info(f"📈 策略表现:")
+        logger.info(f"   初始资金: ${summary['initial_capital']:,.2f}")
+        logger.info(f"   最终权益: ${summary['final_equity']:,.2f}")
+        logger.info(f"   总收益率: {summary['total_return_pct']:+.2f}%")
+        logger.info(f"   年化收益率: {summary['annual_return_pct']:+.2f}%")
         
-        print(f"\n⚠️  风险指标:")
-        print(f"   最大回撤: {summary['max_drawdown_pct']:.2f}%")
-        print(f"   总手续费: ${summary['total_fees']:.2f}")
-        print(f"   平均持仓: {summary['avg_hold_time_hours']:.1f}小时")
+        logger.info(f"\n⚠️  风险指标:")
+        logger.info(f"   最大回撤: {summary['max_drawdown_pct']:.2f}%")
+        logger.info(f"   总手续费: ${summary['total_fees']:.2f}")
+        logger.info(f"   平均持仓: {summary['avg_hold_time_hours']:.1f}小时")
         
-        print(f"\n📊 交易统计:")
-        print(f"   总交易次数: {summary['total_trades']}")
-        print(f"   盈利交易: {summary['winning_trades']}")
-        print(f"   胜率: {summary['win_rate']:.1f}%")
-        print(f"   总盈亏: ${summary['total_pnl']:+.2f}")
+        logger.info(f"\n📊 交易统计:")
+        logger.info(f"   总交易次数: {summary['total_trades']}")
+        logger.info(f"   盈利交易: {summary['winning_trades']}")
+        logger.info(f"   胜率: {summary['win_rate']:.1f}%")
+        logger.info(f"   总盈亏: ${summary['total_pnl']:+.2f}")
         
-        print(f"\n🔧 配置参数:")
-        print(f"   交易对: {self.config.symbol}")
-        print(f"   时间框架: {self.config.timeframe}")
-        print(f"   止损: {self.config.stop_loss_pct}%")
-        print(f"   止盈: {self.config.take_profit_pct}%")
-        print(f"   分型周期: {self.config.fractal_period}")
-        print(f"   信心阈值: {self.config.confidence_threshold}")
+        logger.info(f"\n🔧 配置参数:")
+        logger.info(f"   交易对: {self.config.symbol}")
+        logger.info(f"   时间框架: {self.config.timeframe}")
+        logger.info(f"   止损: {self.config.stop_loss_pct}%")
+        logger.info(f"   止盈: {self.config.take_profit_pct}%")
+        logger.info(f"   分型周期: {self.config.fractal_period}")
+        logger.info(f"   信心阈值: {self.config.confidence_threshold}")
         
         # 显示最近几笔交易
         if self.trades:
-            print(f"\n📋 最近交易记录:")
+            logger.info(f"\n📋 最近交易记录:")
             recent_trades = self.trades[-10:] if len(self.trades) > 10 else self.trades
             
             for trade in recent_trades:
                 time_str = trade['timestamp'].strftime('%Y-%m-%d %H:%M')
                 if trade['type'] == 'BUY':
-                    print(f"   {time_str} | 买入 {trade['amount']:.4f} BTC @ ${trade['price']:.2f}")
+                    logger.info(f"   {time_str} | 买入 {trade['amount']:.4f} BTC @ ${trade['price']:.2f}")
                 else:
                     pnl_str = f"(${trade.get('pnl', 0):+.2f}, {trade.get('pnl_pct', 0):+.2f}%)" if 'pnl' in trade else ""
                     reason = trade.get('signal', {}).get('reason', '')
-                    print(f"   {time_str} | 卖出 {trade['amount']:.4f} BTC @ ${trade['price']:.2f} {pnl_str}")
+                    logger.info(f"   {time_str} | 卖出 {trade['amount']:.4f} BTC @ ${trade['price']:.2f} {pnl_str}")
                     if reason:
-                        print(f"      理由: {reason}")
+                        logger.info(f"      理由: {reason}")
         
-        print("="*60)
+        logger.info("="*60)
         
         # 保存报告到文件
         if self.config.save_results:
@@ -1096,7 +1121,7 @@ class RealChanBacktestEngine:
             with open(report_file, 'w') as f:
                 json.dump(simple_report, f, indent=2, default=str)
             
-            print(f"\n💾 报告已保存: {report_file}")
+            logger.info(f"\n💾 报告已保存: {report_file}")
 
 # ====================== 多策略比较器 ======================
 class StrategyComparator:
@@ -1112,10 +1137,10 @@ class StrategyComparator:
     
     def compare_strategies(self):
         """比较多个策略"""
-        print(f"\n📊 开始比较 {len(self.strategies)} 个策略...")
+        logger.info(f"\n📊 开始比较 {len(self.strategies)} 个策略...")
         
         for name, config in self.strategies.items():
-            print(f"\n🔧 测试策略: {name}")
+            logger.info(f"\n🔧 测试策略: {name}")
             config.display()
             
             engine = RealChanBacktestEngine(config)
@@ -1123,9 +1148,9 @@ class StrategyComparator:
             
             if report:
                 self.results[name] = report['summary']
-                print(f"   收益率: {report['summary']['total_return_pct']:.2f}%")
-                print(f"   最大回撤: {report['summary']['max_drawdown_pct']:.2f}%")
-                print(f"   胜率: {report['summary']['win_rate']:.1f}%")
+                logger.info(f"   收益率: {report['summary']['total_return_pct']:.2f}%")
+                logger.info(f"   最大回撤: {report['summary']['max_drawdown_pct']:.2f}%")
+                logger.info(f"   胜率: {report['summary']['win_rate']:.1f}%")
         
         return self.analyze_comparison()
     
@@ -1134,9 +1159,9 @@ class StrategyComparator:
         if not self.results:
             return None
         
-        print("\n" + "="*60)
-        print("🏆 策略比较结果")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("🏆 策略比较结果")
+        logger.info("="*60)
         
         # 转换为DataFrame
         results_df = pd.DataFrame(self.results).T
@@ -1146,23 +1171,23 @@ class StrategyComparator:
         best_risk_adj = results_df.loc[(results_df['total_return_pct'] / abs(results_df['max_drawdown_pct'])).idxmax()]
         best_win_rate = results_df.loc[results_df['win_rate'].idxmax()]
         
-        print(f"\n📈 最佳收益率:")
-        print(f"   策略: {best_return.name}")
-        print(f"   收益率: {best_return['total_return_pct']:.2f}%")
-        print(f"   最大回撤: {best_return['max_drawdown_pct']:.2f}%")
+        logger.info(f"\n📈 最佳收益率:")
+        logger.info(f"   策略: {best_return.name}")
+        logger.info(f"   收益率: {best_return['total_return_pct']:.2f}%")
+        logger.info(f"   最大回撤: {best_return['max_drawdown_pct']:.2f}%")
         
-        print(f"\n⚖️  最佳风险调整收益:")
-        print(f"   策略: {best_risk_adj.name}")
+        logger.info(f"\n⚖️  最佳风险调整收益:")
+        logger.info(f"   策略: {best_risk_adj.name}")
         risk_adj_return = best_risk_adj['total_return_pct'] / abs(best_risk_adj['max_drawdown_pct'])
-        print(f"   风险调整收益: {risk_adj_return:.2f}")
+        logger.info(f"   风险调整收益: {risk_adj_return:.2f}")
         
-        print(f"\n🎯 最高胜率:")
-        print(f"   策略: {best_win_rate.name}")
-        print(f"   胜率: {best_win_rate['win_rate']:.1f}%")
+        logger.info(f"\n🎯 最高胜率:")
+        logger.info(f"   策略: {best_win_rate.name}")
+        logger.info(f"   胜率: {best_win_rate['win_rate']:.1f}%")
         
         # 显示所有策略比较
-        print(f"\n📋 所有策略表现:")
-        print(results_df[['total_return_pct', 'max_drawdown_pct', 'win_rate', 'total_trades']])
+        logger.info(f"\n📋 所有策略表现:")
+        logger.info(results_df[['total_return_pct', 'max_drawdown_pct', 'win_rate', 'total_trades']].to_string())
         
         # 保存比较结果
         # 使用外层目录保存比较结果
@@ -1171,22 +1196,22 @@ class StrategyComparator:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         results_file = f"{outer_reports_dir}/strategy_comparison_{timestamp}.csv"
         results_df.to_csv(results_file)
-        print(f"\n💾 比较结果已保存: {results_file}")
+        logger.info(f"\n💾 比较结果已保存: {results_file}")
         
         return results_df
 
 # ====================== 主函数 ======================
 def main():
     """主函数"""
-    print("="*60)
-    print("📊 真实数据缠论回测系统")
-    print("="*60)
+    logger.info("="*60)
+    logger.info("📊 真实数据缠论回测系统")
+    logger.info("="*60)
     
-    print("\n请选择模式:")
-    print("1. 单策略回测")
-    print("2. 多策略比较")
-    print("3. 参数优化")
-    print("4. 查看可用交易对")
+    logger.info("\n请选择模式:")
+    logger.info("1. 单策略回测")
+    logger.info("2. 多策略比较")
+    logger.info("3. 参数优化")
+    logger.info("4. 查看可用交易对")
     
     choice = input("\n请输入选项 (1-4): ").strip()
     
@@ -1199,7 +1224,7 @@ def main():
         # 确认开始回测
         confirm = input("\n🚀 是否开始回测? (y/n): ").lower() == 'y'
         if not confirm:
-            print("回测已取消")
+            logger.info("回测已取消")
             return
         
         # 运行回测
@@ -1213,8 +1238,8 @@ def main():
     
     elif choice == '2':
         # 多策略比较
-        print("\n📊 多策略比较模式")
-        print("将测试不同参数配置的策略表现")
+        logger.info("\n📊 多策略比较模式")
+        logger.info("将测试不同参数配置的策略表现")
         
         comparator = StrategyComparator()
         
@@ -1248,8 +1273,8 @@ def main():
     
     elif choice == '3':
         # 参数优化
-        print("\n🔧 参数优化模式")
-        print("将测试不同参数组合，找出最优配置")
+        logger.info("\n🔧 参数优化模式")
+        logger.info("将测试不同参数组合，找出最优配置")
         
         # 基础配置
         base_config = RealBacktestConfig()
@@ -1267,7 +1292,7 @@ def main():
         for sl in param_grid['stop_loss_pct']:
             for tp in param_grid['take_profit_pct']:
                 for ct in param_grid['confidence_threshold']:
-                    print(f"\n测试参数: SL={sl}%, TP={tp}%, CT={ct}")
+                    logger.info(f"\n测试参数: SL={sl}%, TP={tp}%, CT={ct}")
                     
                     # 创建配置副本
                     config = RealBacktestConfig()
@@ -1301,22 +1326,22 @@ def main():
             results_df['risk_adjusted'] = results_df['total_return_pct'] / abs(results_df['max_drawdown_pct'])
             best_risk_adj = results_df.loc[results_df['risk_adjusted'].idxmax()]
             
-            print("\n" + "="*60)
-            print("🏆 最优参数组合")
-            print("="*60)
+            logger.info("\n" + "="*60)
+            logger.info("🏆 最优参数组合")
+            logger.info("="*60)
             
-            print(f"\n💰 最高收益率:")
-            print(f"   止损: {best_return['stop_loss_pct']}%")
-            print(f"   止盈: {best_return['take_profit_pct']}%")
-            print(f"   信心阈值: {best_return['confidence_threshold']}")
-            print(f"   收益率: {best_return['total_return_pct']:.2f}%")
-            print(f"   最大回撤: {best_return['max_drawdown_pct']:.2f}%")
+            logger.info(f"\n💰 最高收益率:")
+            logger.info(f"   止损: {best_return['stop_loss_pct']}%")
+            logger.info(f"   止盈: {best_return['take_profit_pct']}%")
+            logger.info(f"   信心阈值: {best_return['confidence_threshold']}")
+            logger.info(f"   收益率: {best_return['total_return_pct']:.2f}%")
+            logger.info(f"   最大回撤: {best_return['max_drawdown_pct']:.2f}%")
             
-            print(f"\n⚖️  最佳风险调整收益:")
-            print(f"   止损: {best_risk_adj['stop_loss_pct']}%")
-            print(f"   止盈: {best_risk_adj['take_profit_pct']}%")
-            print(f"   信心阈值: {best_risk_adj['confidence_threshold']}")
-            print(f"   风险调整收益: {best_risk_adj['risk_adjusted']:.2f}")
+            logger.info(f"\n⚖️  最佳风险调整收益:")
+            logger.info(f"   止损: {best_risk_adj['stop_loss_pct']}%")
+            logger.info(f"   止盈: {best_risk_adj['take_profit_pct']}%")
+            logger.info(f"   信心阈值: {best_risk_adj['confidence_threshold']}")
+            logger.info(f"   风险调整收益: {best_risk_adj['risk_adjusted']:.2f}")
             
             # 保存结果
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -1324,26 +1349,24 @@ def main():
             os.makedirs(reports_dir, exist_ok=True)
             results_file = os.path.join(reports_dir, f'parameter_optimization_{timestamp}.csv')
             results_df.to_csv(results_file, index=False)
-            print(f"\n💾 优化结果已保存: {results_file}")
+            logger.info(f"\n💾 优化结果已保存: {results_file}")
     
     elif choice == '4':
         # 查看可用交易对
-        print("\n🔍 正在获取可用交易对...")
+        logger.info("\n🔍 正在获取可用交易对...")
         data_fetcher = RealDataFetcher()
         symbols = data_fetcher.get_available_symbols()
         
-        print(f"\n📋 前20个可用交易对:")
+        logger.info(f"\n📋 前20个可用交易对:")
         for i, symbol in enumerate(symbols[:20], 1):
-            print(f"  {i:2d}. {symbol}")
+            logger.info(f"  {i:2d}. {symbol}")
         
-        print(f"\n📋 可用的时间框架:")
+        logger.info(f"\n📋 可用的时间框架:")
         timeframes = data_fetcher.get_available_timeframes()
-        for tf in timeframes:
-            print(f"  {tf}", end=' ')
-        print()
+        logger.info(f"  {', '.join(timeframes)}")
     
     else:
-        print("❌ 无效选项")
+        logger.error("❌ 无效选项")
 
 if __name__ == "__main__":
     # 创建必要的目录
@@ -1353,8 +1376,8 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n👋 程序被用户中断")
+        logger.info("\n\n👋 程序被用户中断")
     except Exception as e:
-        print(f"\n❌ 程序运行出错: {e}")
+        logger.error(f"\n❌ 程序运行出错: {e}")
         import traceback
         traceback.print_exc()
