@@ -104,10 +104,12 @@ class ChanBacktestEngine:
     
     def save_report(self, results, output_dir):
         """保存报告"""
-        os.makedirs(output_dir, exist_ok=True)
+        # 确保输出目录在外层目录
+        outer_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), output_dir)
+        os.makedirs(outer_dir, exist_ok=True)
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        report_file = f"{output_dir}/report_{timestamp}.json"
+        report_file = f"{outer_dir}/report_{timestamp}.json"
         
         report_data = {
             'timestamp': datetime.now().isoformat(),
@@ -126,7 +128,7 @@ class ChanBacktestEngine:
             report_data['real_results'] = self.real_results
             
             # 另外保存真实回测的详细报告
-            real_report_file = f"{output_dir}/real_report_{timestamp}.json"
+            real_report_file = f"{outer_dir}/real_report_{timestamp}.json"
             with open(real_report_file, 'w') as f:
                 json.dump(self.real_results, f, indent=2, default=str)
             print(f"💾 真实回测详细报告已保存: {real_report_file}")
@@ -321,9 +323,11 @@ class ConfigManager:
     @staticmethod
     def save_config_to_file(config, filename):
         """保存配置到文件"""
-        os.makedirs('configs', exist_ok=True)
+        # 确保配置文件也在外层目录
+        outer_configs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs")
+        os.makedirs(outer_configs_dir, exist_ok=True)
         if not filename.endswith('.json'):
-            filename = f"configs/{filename}.json"
+            filename = f"{outer_configs_dir}/{filename}.json"
         
         with open(filename, 'w') as f:
             json.dump(config, f, indent=2, default=str)
@@ -491,12 +495,15 @@ class BatchTester:
         
         # 保存结果
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        results_file = f"reports/batch_results_{timestamp}.json"
+        # 确保批量测试结果也在外层目录
+        outer_reports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+        os.makedirs(outer_reports_dir, exist_ok=True)
+        results_file = f"{outer_reports_dir}/batch_results_{timestamp}.json"
         
         with open(results_file, 'w') as f:
             json.dump(results, f, indent=2, default=str)
         
-        print(f"\n💾 批量测试结果已保存: {results_file}")
+        print(f"💾 批量测试结果已保存: {results_file}")
         
         return best_return, best_sharpe
 

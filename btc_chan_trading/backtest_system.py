@@ -29,9 +29,10 @@ class RealDataFetcher:
             'rateLimit': 1200  # Binance API限制
         })
         
-        # 数据缓存
+        # 数据缓存 - 放在外层目录
         self.data_cache = {}
-        self.cache_dir = "historical_data"
+        # 获取当前文件所在目录的父目录（即代码目录的外层目录）
+        self.cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "historical_data")
         os.makedirs(self.cache_dir, exist_ok=True)
     
     def get_historical_ohlcv(self, 
@@ -1080,10 +1081,12 @@ class RealChanBacktestEngine:
         
         # 保存图表
         if self.config.save_results:
-            os.makedirs('reports', exist_ok=True)
+            # 使用外层目录保存图表
+            outer_reports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+            os.makedirs(outer_reports_dir, exist_ok=True)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             symbol_clean = self.config.symbol.replace('/', '_')
-            filename = f'reports/{symbol_clean}_backtest_{timestamp}.png'
+            filename = f"{outer_reports_dir}/{symbol_clean}_backtest_{timestamp}.png"
             plt.savefig(filename, dpi=300, bbox_inches='tight')
             print(f"📈 图表已保存: {filename}")
         
@@ -1142,9 +1145,12 @@ class RealChanBacktestEngine:
         
         # 保存报告到文件
         if self.config.save_results:
+            # 使用外层目录保存报告
+            outer_reports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+            os.makedirs(outer_reports_dir, exist_ok=True)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             symbol_clean = self.config.symbol.replace('/', '_')
-            report_file = f'reports/{symbol_clean}_report_{timestamp}.json'
+            report_file = f"{outer_reports_dir}/{symbol_clean}_report_{timestamp}.json"
             
             # 简化报告数据
             simple_report = {
@@ -1226,8 +1232,11 @@ class StrategyComparator:
         print(results_df[['total_return_pct', 'max_drawdown_pct', 'win_rate', 'total_trades']])
         
         # 保存比较结果
+        # 使用外层目录保存比较结果
+        outer_reports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+        os.makedirs(outer_reports_dir, exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        results_file = f'reports/strategy_comparison_{timestamp}.csv'
+        results_file = f"{outer_reports_dir}/strategy_comparison_{timestamp}.csv"
         results_df.to_csv(results_file)
         print(f"\n💾 比较结果已保存: {results_file}")
         
@@ -1378,7 +1387,9 @@ def main():
             
             # 保存结果
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            results_file = f'reports/parameter_optimization_{timestamp}.csv'
+            reports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+            os.makedirs(reports_dir, exist_ok=True)
+            results_file = os.path.join(reports_dir, f'parameter_optimization_{timestamp}.csv')
             results_df.to_csv(results_file, index=False)
             print(f"\n💾 优化结果已保存: {results_file}")
     
