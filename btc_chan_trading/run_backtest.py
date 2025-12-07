@@ -15,6 +15,10 @@ import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings('ignore')
 
+# 导入真实回测引擎
+from backtest_system import RealChanBacktestEngine as RealEngine
+from backtest_system import RealBacktestConfig as RealConfig
+
 # ====================== 核心回测引擎 ======================
 class ChanBacktestEngine:
     """缠论回测引擎（简化版）"""
@@ -30,13 +34,51 @@ class ChanBacktestEngine:
         print(f"   时间: {self.config['start_date']} 到 {self.config['end_date']}")
         print(f"   资金: ${self.config['initial_capital']}")
         
-        # 这里应该是实际回测逻辑
-        # 由于代码长度限制，这里简化处理
+        # 使用真实回测引擎
         if self.config['verbose']:
-            print("   模拟回测中...")
+            print("   使用真实数据回测中...")
         
-        # 生成模拟结果
-        return self.generate_sample_results()
+        # 转换配置到真实回测引擎的格式
+        real_config = RealConfig()
+        real_config.symbol = self.config['symbol']
+        real_config.timeframe = self.config['timeframe']
+        real_config.start_date = self.config['start_date']
+        real_config.end_date = self.config['end_date']
+        real_config.initial_capital = self.config['initial_capital']
+        real_config.trade_amount = self.config['trade_amount']
+        real_config.leverage = self.config['leverage']
+        real_config.stop_loss_pct = self.config['stop_loss_pct']
+        real_config.take_profit_pct = self.config['take_profit_pct']
+        real_config.fee_rate = self.config['fee_rate']
+        real_config.slippage = self.config['slippage']
+        real_config.fractal_period = self.config['fractal_period']
+        real_config.confidence_threshold = self.config['confidence_threshold']
+        real_config.enable_entry_scoping = self.config['enable_entry_scoping']
+        real_config.verbose = self.config['verbose']
+        real_config.plot_results = self.config['plot_results']
+        real_config.save_results = self.config['save_results']
+        
+        # 创建并运行真实回测引擎
+        real_engine = RealEngine(real_config)
+        real_results = real_engine.run_backtest()
+        
+        if real_results is None:
+            print("❌ 回测失败")
+            return None
+        
+        # 转换结果格式以兼容原有接口
+        results = {
+            'total_return': real_results['summary']['total_return_pct'],
+            'max_drawdown': real_results['summary']['max_drawdown_pct'],
+            'win_rate': real_results['summary']['win_rate'],
+            'total_trades': real_results['summary']['total_trades'],
+            'sharpe_ratio': 0.0  # 真实回测没有计算夏普比率，可以考虑后续添加
+        }
+        
+        # 保存真实回测的详细结果
+        self.real_results = real_results
+        
+        return results
     
     def generate_sample_results(self):
         """生成示例结果（实际使用时应替换为真实回测）"""
@@ -78,6 +120,16 @@ class ChanBacktestEngine:
                 'max_drawdown': results['max_drawdown']
             }
         }
+        
+        # 如果有真实回测的详细结果，也保存起来
+        if hasattr(self, 'real_results') and self.real_results:
+            report_data['real_results'] = self.real_results
+            
+            # 另外保存真实回测的详细报告
+            real_report_file = f"{output_dir}/real_report_{timestamp}.json"
+            with open(real_report_file, 'w') as f:
+                json.dump(self.real_results, f, indent=2, default=str)
+            print(f"💾 真实回测详细报告已保存: {real_report_file}")
         
         with open(report_file, 'w') as f:
             json.dump(report_data, f, indent=2, default=str)
