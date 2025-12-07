@@ -31,17 +31,20 @@ class BacktestConfig:
     SYMBOL = "BTC/USDT"
     TIMEFRAME = "30m"  # 主时间框架
     ENTRY_TIMEFRAME = "5m"  # 入场时间框架
-    START_DATE = "2024-01-01 00:00:00"  # 回测开始时间
-    END_DATE = "2024-12-01 00:00:00"    # 回测结束时间
+    START_DATE = "2025-01-01 00:00:00"  # 回测开始时间
+    END_DATE = "2025-12-01 00:00:00"    # 回测结束时间
     
     # 交易参数
-    INITIAL_CAPITAL = 10000.0  # 初始资金 (USDT)
+    INITIAL_CAPITAL = 1000.0  # 初始资金 (USDT)
     TRADE_AMOUNT = 0.001       # 每次交易BTC数量
     LEVERAGE = 1               # 杠杆（回测建议用1）
     
     # 手续费和滑点
-    FEE_RATE = 0.001           # 手续费率 (0.1%)
-    SLIPPAGE = 0.0005          # 滑点 (0.05%)
+    FEE_RATE = 0           # 手续费率 (0.1%)
+    # FEE_RATE = 0.001           # 手续费率 (0.1%)
+    SLIPPAGE = 0          # 滑点 (0.05%)
+    # SLIPPAGE = 0.0005          # 滑点 (0.05%)
+
     
     # 风险控制
     STOP_LOSS_PCT = 1.5        # 止损百分比
