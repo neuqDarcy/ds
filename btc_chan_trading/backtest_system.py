@@ -17,6 +17,9 @@ from typing import Dict, List, Optional, Tuple, Any
 import warnings
 warnings.filterwarnings('ignore')
 
+# 导入 btc_chan_trading 中的交易信号分析类
+from btc_chan_trading import ChanTheoryAnalyzer, Config
+
 # ====================== 真实数据获取器 ======================
 class RealDataFetcher:
     """真实交易所数据获取器"""
@@ -385,6 +388,18 @@ class RealChanBacktestEngine:
         self.config = config
         self.data_fetcher = RealDataFetcher()
         
+        # 创建并配置 ChanTheoryAnalyzer 使用的 Config 对象
+        chan_config = Config()
+        chan_config.SYMBOL = config.symbol
+        chan_config.TRADE_AMOUNT = config.trade_amount
+        chan_config.LEVERAGE = config.leverage
+        chan_config.STOP_LOSS_PCT = config.stop_loss_pct
+        chan_config.TAKE_PROFIT_PCT = config.take_profit_pct
+        chan_config.FRACTAL_PERIOD = config.fractal_period
+        
+        # 初始化缠论分析器
+        self.chan_analyzer = ChanTheoryAnalyzer(chan_config)
+        
         # 回测状态
         self.capital = config.initial_capital
         self.btc_amount = 0.0
@@ -428,7 +443,8 @@ class RealChanBacktestEngine:
     
     def calculate_position_size(self, price: float) -> float:
         """计算仓位大小"""
-        max_position_value = self.capital * 0.1  # 最多使用10%资金
+        # 考虑杠杆的资金使用 - 最多使用10%资金 × 杠杆倍数
+        max_position_value = self.capital * 0.1 * self.config.leverage
         position_amount = min(self.config.trade_amount, max_position_value / price)
         return position_amount
     
@@ -659,65 +675,22 @@ class RealChanBacktestEngine:
         return {'trend': trend, 'strength': strength}
     
     def find_buy_signal(self, df: pd.DataFrame, current_idx: int, trend_analysis: Dict) -> Dict[str, Any]:
-        """寻找买点信号"""
-        current_price = df.iloc[current_idx]['close']
+        """寻找买点信号 - 调用 ChanTheoryAnalyzer 中的实现"""
+        # 使用当前索引之前的所有数据调用缠论分析器的 buy 信号方法
+        current_df = df.iloc[:current_idx + 1].copy()
         current_time = df.iloc[current_idx]['timestamp']
         
-        # 获取近期数据
-        lookback = min(10, current_idx)
-        recent_data = df.iloc[current_idx - lookback:current_idx + 1]
+        # 调用缠论分析器的 find_buy_signal 方法
+        buy_signal = self.chan_analyzer.find_buy_signal(current_df, trend_analysis)
         
-        recent_low = recent_data['low'].min()
-        recent_high = recent_data['high'].max()
-        
-        signals = []
-        
-        # 基于价格的信号
-        if current_price <= recent_low * 1.01:  # 接近近期低点
-            signals.append({
-                'type': 'near_low',
-                'confidence': 0.6,
-                'description': '价格接近近期低点'
-            })
-        
-        # 基于RSI的信号
-        if 'rsi' in df.columns:
-            current_rsi = df.iloc[current_idx]['rsi']
-            if current_rsi < 30:  # 超卖
-                signals.append({
-                    'type': 'rsi_oversold',
-                    'confidence': 0.7,
-                    'description': f'RSI超卖: {current_rsi:.1f}'
-                })
-        
-        # 基于MACD的信号
-        if 'macd' in df.columns and 'macd_signal' in df.columns:
-            macd = df.iloc[current_idx]['macd']
-            macd_signal = df.iloc[current_idx]['macd_signal']
-            if macd > macd_signal and df.iloc[current_idx-1]['macd'] <= df.iloc[current_idx-1]['macd_signal']:
-                signals.append({
-                    'type': 'macd_cross',
-                    'confidence': 0.65,
-                    'description': 'MACD金叉'
-                })
-        
-        # 基于布林带的信号
-        if 'bb_lower' in df.columns:
-            bb_lower = df.iloc[current_idx]['bb_lower']
-            if current_price <= bb_lower * 1.01:
-                signals.append({
-                    'type': 'bb_lower',
-                    'confidence': 0.6,
-                    'description': '价格接近布林带下轨'
-                })
-        
-        if signals:
-            best_signal = max(signals, key=lambda x: x['confidence'])
+        # 转换返回格式以匹配回测引擎的期望
+        if buy_signal['signals']:
+            best_signal = max(buy_signal['signals'], key=lambda x: x['confidence'])
             return {
                 'signal': 'BUY',
                 'reason': best_signal['description'],
                 'confidence': best_signal['confidence'],
-                'price': current_price,
+                'price': buy_signal['current_price'],
                 'timestamp': current_time,
                 'type': best_signal['type']
             }
@@ -726,69 +699,27 @@ class RealChanBacktestEngine:
             'signal': 'HOLD',
             'reason': '无明确买点信号',
             'confidence': 0,
-            'price': current_price,
+            'price': buy_signal['current_price'],
             'timestamp': current_time
         }
     
     def find_sell_signal(self, df: pd.DataFrame, current_idx: int, trend_analysis: Dict) -> Dict[str, Any]:
-        """寻找卖点信号"""
-        current_price = df.iloc[current_idx]['close']
+        """寻找卖点信号 - 调用 ChanTheoryAnalyzer 中的实现"""
+        # 使用当前索引之前的所有数据调用缠论分析器的 sell 信号方法
+        current_df = df.iloc[:current_idx + 1].copy()
         current_time = df.iloc[current_idx]['timestamp']
         
-        # 获取近期数据
-        lookback = min(10, current_idx)
-        recent_data = df.iloc[current_idx - lookback:current_idx + 1]
+        # 调用缠论分析器的 find_sell_signal 方法
+        sell_signal = self.chan_analyzer.find_sell_signal(current_df, trend_analysis)
         
-        recent_high = recent_data['high'].max()
-        
-        signals = []
-        
-        # 基于价格的信号
-        if current_price >= recent_high * 0.99:  # 接近近期高点
-            signals.append({
-                'type': 'near_high',
-                'confidence': 0.6,
-                'description': '价格接近近期高点'
-            })
-        
-        # 基于RSI的信号
-        if 'rsi' in df.columns:
-            current_rsi = df.iloc[current_idx]['rsi']
-            if current_rsi > 70:  # 超买
-                signals.append({
-                    'type': 'rsi_overbought',
-                    'confidence': 0.7,
-                    'description': f'RSI超买: {current_rsi:.1f}'
-                })
-        
-        # 基于MACD的信号
-        if 'macd' in df.columns and 'macd_signal' in df.columns:
-            macd = df.iloc[current_idx]['macd']
-            macd_signal = df.iloc[current_idx]['macd_signal']
-            if macd < macd_signal and df.iloc[current_idx-1]['macd'] >= df.iloc[current_idx-1]['macd_signal']:
-                signals.append({
-                    'type': 'macd_death_cross',
-                    'confidence': 0.65,
-                    'description': 'MACD死叉'
-                })
-        
-        # 基于布林带的信号
-        if 'bb_upper' in df.columns:
-            bb_upper = df.iloc[current_idx]['bb_upper']
-            if current_price >= bb_upper * 0.99:
-                signals.append({
-                    'type': 'bb_upper',
-                    'confidence': 0.6,
-                    'description': '价格接近布林带上轨'
-                })
-        
-        if signals:
-            best_signal = max(signals, key=lambda x: x['confidence'])
+        # 转换返回格式以匹配回测引擎的期望
+        if sell_signal['signals']:
+            best_signal = max(sell_signal['signals'], key=lambda x: x['confidence'])
             return {
                 'signal': 'SELL',
                 'reason': best_signal['description'],
                 'confidence': best_signal['confidence'],
-                'price': current_price,
+                'price': sell_signal['current_price'],
                 'timestamp': current_time,
                 'type': best_signal['type']
             }
@@ -797,7 +728,7 @@ class RealChanBacktestEngine:
             'signal': 'HOLD',
             'reason': '无明确卖点信号',
             'confidence': 0,
-            'price': current_price,
+            'price': sell_signal['current_price'],
             'timestamp': current_time
         }
     
@@ -831,10 +762,12 @@ class RealChanBacktestEngine:
             if self.position and self.check_stop_loss_take_profit(current_price, current_time):
                 continue
             
-            # 缠论分析
-            fractals = self.find_fractals(df, idx)
-            bi_segments = self.identify_bi_segments(fractals)
-            trend_analysis = self.analyze_trend(bi_segments)
+            # 缠论分析 - 使用ChanTheoryAnalyzer实例
+            current_df = df.iloc[:idx+1]
+            fractals = self.chan_analyzer.find_fractals(current_df)
+            bi_segments = self.chan_analyzer.identify_bi_segments(fractals)
+            central_pivots = self.chan_analyzer.find_central_pivot(bi_segments, current_df)
+            trend_analysis = self.chan_analyzer.analyze_trend(bi_segments, central_pivots)
             
             # 根据持仓状态决定分析类型
             if not self.position:  # 无持仓，寻找买点

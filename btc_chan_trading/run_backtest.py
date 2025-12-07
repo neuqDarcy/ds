@@ -147,7 +147,7 @@ def create_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 基本回测
+  # 基本回测leverage:
   %(prog)s --start 2024-01-01 --end 2024-06-01
   
   # 指定交易对和资金
