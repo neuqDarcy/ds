@@ -73,11 +73,7 @@ class ExchangeManager:
         self.exchange = None
         self.initialized = False
         
-        if not config.TEST_MODE:
-            self._init_real_exchange()
-        else:
-            print("🔧 运行在模拟模式，不会真实下单")
-            self.initialized = True
+        self._init_real_exchange()
     
     def _init_real_exchange(self):
         """初始化真实交易所连接"""
