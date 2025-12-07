@@ -5,4 +5,4 @@ schedule
 python-dotenv
 requests
 urllib3
-schedule
+matplotlib
