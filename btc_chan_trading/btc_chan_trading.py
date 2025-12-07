@@ -104,10 +104,7 @@ class ExchangeManager:
     def get_ohlcv(self, timeframe: str, limit: int = 100) -> pd.DataFrame:
         """获取K线数据"""
         try:
-            if self.config.TEST_MODE:
-                return self._get_mock_data(timeframe, limit)
-            else:
-                return self._get_real_data(timeframe, limit)
+            return self._get_real_data(timeframe, limit)
         except Exception as e:
             print(f"❌ 获取K线数据失败: {e}")
             return pd.DataFrame()
